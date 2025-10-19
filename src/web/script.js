@@ -1,4 +1,4 @@
-const API = `${window.location.origin}`;   // https://rust-vault.onrender.com
+const API = `${window.location.origin}`;
 
 const $     = q => document.querySelector(q);
 const $sel  = $('#collectionSelect');
@@ -36,11 +36,10 @@ async function loadDocuments() {
     const docs = await fetchJSON(`/documents/${col}`);
     $notes.innerHTML = docs.map(d => `
       <div class="note">
-        <button class="del" data-id="${d._id}">&times;</button>
+        <button class="del" data-id="${d._id.$oid}">&times;</button>
         <h3>${d.title}</h3>
         <p>${d.content}</p>
       </div>`).join('');
-    // attach delete listeners
     $$notes('.del').forEach(btn =>
       btn.onclick = async e => {
         e.stopPropagation();
@@ -74,8 +73,6 @@ $form.addEventListener('submit', async e => {
 });
 
 $('#refreshBtn').onclick = () => loadDocuments();
-
-// helpers
 const $$notes = sel => $notes.querySelectorAll(sel);
 
 loadCollections();
