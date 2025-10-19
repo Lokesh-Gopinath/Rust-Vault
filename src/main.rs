@@ -45,6 +45,7 @@ async fn main() {
     // Routes
     let app = Router::new()
         .route("/", get(root))
+        .route("/collections", get(get_collections))
         .route("/documents/:collection", get(get_documents))
         .route("/add/:collection", post(add_document))
         .with_state(state)
@@ -62,6 +63,16 @@ async fn main() {
 // Serve frontend HTML
 async fn root() -> Html<&'static str> {
     Html(include_str!("../web/index.html"))
+}
+
+// List all collections in the database
+async fn get_collections(State(state): State<AppState>) -> Json<Vec<String>> {
+    let names = state
+        .db
+        .list_collection_names(None)
+        .await
+        .unwrap_or_default();
+    Json(names)
 }
 
 // Add a document to selected collection
@@ -101,9 +112,3 @@ async fn get_documents(
 
     Json(notes)
 }
-
-    }
-
-    Json(notes)
-}
-
