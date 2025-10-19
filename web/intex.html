@@ -1,20 +1,32 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>RustVault</title>
-  <link rel="stylesheet" href="style.css" />
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+    .note { border: 1px solid #ccc; padding: 10px; margin: 10px 0; }
+    select, input, textarea, button { width: 100%; margin: 5px 0; padding: 8px; }
+  </style>
 </head>
 <body>
-  <h1>RustVault 🦀</h1>
+  <h1>RustVault</h1>
 
-  <form id="noteForm">
+  <label for="collectionSelect">Select Collection:</label>
+  <select id="collectionSelect">
+    <option value="notes">notes</option>
+    <option value="dns_list">dns_list</option>
+    <option value="movies">movies</option>
+    <option value="discs">discs</option>
+  </select>
+
+  <form id="docForm">
     <input type="text" id="title" placeholder="Title" required />
     <textarea id="content" placeholder="Content" required></textarea>
-    <button type="submit">Save</button>
+    <button type="submit">Add Document</button>
   </form>
 
-  <h2>Your Notes</h2>
+  <h2>Documents</h2>
   <div id="notes"></div>
 
   <script src="script.js"></script>
