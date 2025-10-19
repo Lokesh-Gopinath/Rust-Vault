@@ -3,8 +3,26 @@ const API = "https://rust-vault.onrender.com"; // replace with your Render URL
 const collectionSelect = document.getElementById("collectionSelect");
 const docForm = document.getElementById("docForm");
 
+async function loadCollections() {
+  const res = await fetch(`${API}/collections`);
+  const collections = await res.json();
+
+  collectionSelect.innerHTML = "";
+  collections.forEach(name => {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = name;
+    collectionSelect.appendChild(option);
+  });
+
+  // Load documents for first collection by default
+  if (collections.length > 0) loadDocuments();
+}
+
 async function loadDocuments() {
   const collection = collectionSelect.value;
+  if (!collection) return;
+
   const res = await fetch(`${API}/documents/${collection}`);
   const data = await res.json();
   const container = document.getElementById("notes");
@@ -38,4 +56,4 @@ docForm.addEventListener("submit", async (e) => {
 });
 
 // Initial load
-loadDocuments();
+loadCollections();
