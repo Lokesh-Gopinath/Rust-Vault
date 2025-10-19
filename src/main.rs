@@ -1,14 +1,16 @@
 use axum::{
-    extract::State,
-    response::Json,
+    extract::{Path, State},
+    response::{Html, Json},
     routing::{get, post},
     Router,
 };
-use mongodb::{bson::doc, bson::Document, Client, Collection};
+use futures::StreamExt;
+use mongodb::{bson::{doc, Document}, Client, Database};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use futures::StreamExt;
 use tokio::net::TcpListener;
+use tower::ServiceBuilder;
+use tower_http::cors::{Any, CorsLayer};
 use axum::serve;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -19,57 +21,79 @@ struct Note {
 
 #[derive(Clone)]
 struct AppState {
-    collection: Arc<Collection<Document>>,
+    db: Arc<Database>,
 }
 
 #[tokio::main]
 async fn main() {
-    // Get MongoDB connection string from environment variable
+    // MongoDB URI from environment variable
     let mongo_uri =
-        std::env::var("MONGO_URI").expect("❌ MONGO_URI must be set in environment variables");
+        std::env::var("MONGO_URI").expect("MONGO_URI must be set in environment variables");
 
     // Connect to MongoDB
     let client = Client::with_uri_str(&mongo_uri)
         .await
-        .expect("❌ Failed to connect to MongoDB");
+        .expect("Failed to connect to MongoDB");
     let db = client.database("rustvault");
-    let collection = db.collection::<Document>("notes");
-
     let state = AppState {
-        collection: Arc::new(collection),
+        db: Arc::new(db),
     };
 
-    // Define routes
-    let app = Router::new()
-        .route("/notes", get(get_notes))
-        .route("/add", post(add_note))
-        .with_state(state);
+    // CORS layer
+    let cors = CorsLayer::new().allow_origin(Any);
 
-    // Bind and serve
+    // Routes
+    let app = Router::new()
+        .route("/", get(root))
+        .route("/collections", get(get_collections))
+        .route("/documents/:collection", get(get_documents))
+        .route("/add/:collection", post(add_document))
+        .with_state(state)
+        .layer(ServiceBuilder::new().layer(cors));
+
+    // Bind to port
     let listener = TcpListener::bind("0.0.0.0:8080")
         .await
-        .expect("❌ Failed to bind to port 8080");
+        .expect("Failed to bind port 8080");
 
     println!("✅ RustVault running on http://0.0.0.0:8080");
     serve(listener, app).await.unwrap();
 }
 
-// Add a new note
-async fn add_note(
+// Serve frontend HTML
+async fn root() -> Html<&'static str> {
+    Html(include_str!("web/index.html"))
+}
+
+// List all collections in the database
+async fn get_collections(State(state): State<AppState>) -> Json<Vec<String>> {
+    let names = state
+        .db
+        .list_collection_names(None)
+        .await
+        .unwrap_or_default();
+    Json(names)
+}
+
+// Add a document to selected collection
+async fn add_document(
+    Path(collection_name): Path<String>,
     State(state): State<AppState>,
     Json(note): Json<Note>,
 ) -> Json<&'static str> {
-    state
-        .collection
-        .insert_one(doc! { "title": note.title, "content": note.content })
-        .await
-        .unwrap();
-    Json("✅ Note added successfully")
+    let collection = state.db.collection::<Document>(&collection_name);
+    let bson_doc = doc! { "title": note.title, "content": note.content };
+    collection.insert_one(bson_doc).await.unwrap();
+    Json("✅ Document added successfully")
 }
 
-// Fetch all notes
-async fn get_notes(State(state): State<AppState>) -> Json<Vec<Note>> {
-    let mut cursor = state.collection.find(doc! {}).await.unwrap();
+// Get all documents from selected collection
+async fn get_documents(
+    Path(collection_name): Path<String>,
+    State(state): State<AppState>,
+) -> Json<Vec<Note>> {
+    let collection = state.db.collection::<Document>(&collection_name);
+    let mut cursor = collection.find(doc! {}).await.unwrap();
     let mut notes = Vec::new();
 
     while let Some(result) = cursor.next().await {
