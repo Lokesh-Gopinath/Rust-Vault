@@ -1,4 +1,4 @@
-const API = "https://rust-vault.onrender.com";
+const API = "https://rust-vault.onrender.com"; // replace with your Render URL
 
 const collectionSelect = document.getElementById("collectionSelect");
 const docForm = document.getElementById("docForm");
