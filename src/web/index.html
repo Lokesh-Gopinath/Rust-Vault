@@ -2,30 +2,32 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>RustVault</title>
-  <style>
-    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
-    .note { border: 1px solid #ccc; padding: 10px; margin: 10px 0; }
-    select, input, textarea, button { width: 100%; margin: 5px 0; padding: 8px; }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RustVault 🦀</title>
+  <link rel="stylesheet" href="/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
-  <h1>RustVault</h1>
+  <h1>RustVault <span>🦀</span></h1>
 
-  <label for="collectionSelect">Select Collection:</label>
-  <select id="collectionSelect">
-    <!-- Options populated dynamically -->
-  </select>
+  <section class="card toolbar">
+    <label for="collectionSelect">Collection</label>
+    <select id="collectionSelect">
+      <option disabled selected>Loading…</option>
+    </select>
+    <button id="refreshBtn" title="Refresh">⟳</button>
+  </section>
 
-  <form id="docForm">
-    <input type="text" id="title" placeholder="Title" required />
-    <textarea id="content" placeholder="Content" required></textarea>
-    <button type="submit">Add Document</button>
+  <form id="docForm" class="card">
+    <input id="title" type="text" placeholder="Title" required autocomplete="off">
+    <textarea id="content" placeholder="Content…" rows="2" required></textarea>
+    <button type="submit">Add Note</button>
   </form>
 
-  <h2>Documents</h2>
-  <div id="notes"></div>
+  <section id="notes" class="notes-grid"></section>
 
-  <script src="script.js"></script>
+  <div id="toast" class="toast"></div>
+
+  <script src="/script.js"></script>
 </body>
 </html>
