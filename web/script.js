@@ -1,4 +1,4 @@
-const API = "https://YOUR-RENDER-URL.onrender.com/api/notes"; // change later
+const API = "https://rust-vault.onrender.com/"; // change later
 
 async function loadNotes() {
   const res = await fetch(API);
@@ -29,3 +29,4 @@ document.getElementById("noteForm").addEventListener("submit", async (e) => {
 });
 
 loadNotes();
+
