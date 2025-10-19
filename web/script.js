@@ -1,32 +1,41 @@
-const API = "https://rust-vault.onrender.com/"; // change later
+const API = "https://rust-vault.onrender.com";
 
-async function loadNotes() {
-  const res = await fetch(API);
-  const notes = await res.json();
+const collectionSelect = document.getElementById("collectionSelect");
+const docForm = document.getElementById("docForm");
+
+async function loadDocuments() {
+  const collection = collectionSelect.value;
+  const res = await fetch(`${API}/documents/${collection}`);
+  const data = await res.json();
   const container = document.getElementById("notes");
   container.innerHTML = "";
-  notes.forEach(n => {
+  data.forEach(doc => {
     const div = document.createElement("div");
     div.className = "note";
-    div.innerHTML = `<h3>${n.title}</h3><p>${n.content}</p>`;
+    div.innerHTML = `<h3>${doc.title}</h3><p>${doc.content}</p>`;
     container.appendChild(div);
   });
 }
 
-document.getElementById("noteForm").addEventListener("submit", async (e) => {
+// Load documents when collection changes
+collectionSelect.addEventListener("change", loadDocuments);
+
+// Handle form submit
+docForm.addEventListener("submit", async (e) => {
   e.preventDefault();
+  const collection = collectionSelect.value;
   const title = document.getElementById("title").value;
   const content = document.getElementById("content").value;
 
-  await fetch(API, {
+  await fetch(`${API}/add/${collection}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title, content }),
   });
 
-  document.getElementById("noteForm").reset();
-  loadNotes();
+  docForm.reset();
+  loadDocuments();
 });
 
-loadNotes();
-
+// Initial load
+loadDocuments();
