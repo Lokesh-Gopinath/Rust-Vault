@@ -76,7 +76,7 @@ async fn get_documents(
 
     while let Some(res) = cursor.next().await {
         if let Ok(doc) = res {
-            docs.push(mongodb::bson::to_json(&doc).unwrap());
+            docs.push(serde_json::to_value(&doc).unwrap());
         }
     }
     Json(docs)
@@ -102,3 +102,4 @@ async fn delete_document(
     coll.delete_one(doc! { "_id": oid }).await.unwrap();
     Json("✅ Document deleted")
 }
+
