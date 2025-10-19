@@ -1,4 +1,4 @@
-const API = "https://rust-vault.onrender.com"; // replace with your Render URL
+const API = "https://rust-vault.onrender.com/api/notes"; // replace with your Render URL
 
 const collectionSelect = document.getElementById("collectionSelect");
 const docForm = document.getElementById("docForm");
@@ -57,3 +57,4 @@ docForm.addEventListener("submit", async (e) => {
 
 // Initial load
 loadCollections();
+
