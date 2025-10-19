@@ -9,6 +9,7 @@ use mongodb::{bson::{doc, Document}, Client, Database};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 use axum::serve;
 
@@ -25,7 +26,7 @@ struct AppState {
 
 #[tokio::main]
 async fn main() {
-    // MongoDB URI
+    // MongoDB URI from environment variable
     let mongo_uri =
         std::env::var("MONGO_URI").expect("MONGO_URI must be set in environment variables");
 
@@ -34,22 +35,22 @@ async fn main() {
         .await
         .expect("Failed to connect to MongoDB");
     let db = client.database("rustvault");
-
     let state = AppState {
         db: Arc::new(db),
     };
 
-    // CORS layer to allow frontend requests
+    // CORS layer
     let cors = CorsLayer::new().allow_origin(Any);
 
     // Routes
     let app = Router::new()
-        .route("/", get(root))                    // Serve HTML frontend
+        .route("/", get(root))
         .route("/documents/:collection", get(get_documents))
         .route("/add/:collection", post(add_document))
         .with_state(state)
-        .layer(cors);
+        .layer(ServiceBuilder::new().layer(cors));
 
+    // Bind to port
     let listener = TcpListener::bind("0.0.0.0:8080")
         .await
         .expect("Failed to bind port 8080");
@@ -71,7 +72,7 @@ async fn add_document(
 ) -> Json<&'static str> {
     let collection = state.db.collection::<Document>(&collection_name);
     let bson_doc = doc! { "title": note.title, "content": note.content };
-    collection.insert_one(bson_doc, None).await.unwrap();
+    collection.insert_one(bson_doc).await.unwrap();
     Json("✅ Document added successfully")
 }
 
@@ -81,7 +82,7 @@ async fn get_documents(
     State(state): State<AppState>,
 ) -> Json<Vec<Note>> {
     let collection = state.db.collection::<Document>(&collection_name);
-    let mut cursor = collection.find(doc! {}, None).await.unwrap();
+    let mut cursor = collection.find(doc! {}).await.unwrap();
     let mut notes = Vec::new();
 
     while let Some(result) = cursor.next().await {
@@ -100,3 +101,9 @@ async fn get_documents(
 
     Json(notes)
 }
+
+    }
+
+    Json(notes)
+}
+
