@@ -69,7 +69,7 @@ async fn root() -> Html<&'static str> {
 async fn get_collections(State(state): State<AppState>) -> Json<Vec<String>> {
     let names = state
         .db
-        .list_collection_names(None)
+        .list_collection_names()
         .await
         .unwrap_or_default();
     Json(names)
@@ -112,3 +112,4 @@ async fn get_documents(
 
     Json(notes)
 }
+
