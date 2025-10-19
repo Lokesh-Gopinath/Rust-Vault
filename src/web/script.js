@@ -1,60 +1,81 @@
-const API = "https://rust-vault.onrender.com/api/notes"; // replace with your Render URL
+const API = `${window.location.origin}`;   // https://rust-vault.onrender.com
 
-const collectionSelect = document.getElementById("collectionSelect");
-const docForm = document.getElementById("docForm");
+const $     = q => document.querySelector(q);
+const $sel  = $('#collectionSelect');
+const $form = $('#docForm');
+const $notes= $('#notes');
+const $toast= $('#toast');
+
+function toast(msg) {
+  $toast.textContent = msg;
+  $toast.classList.add('show');
+  setTimeout(() => $toast.classList.remove('show'), 2000);
+}
+
+async function fetchJSON(path) {
+  const res = await fetch(`${API}${path}`);
+  if (!res.ok) throw new Error(res.statusText);
+  return res.json();
+}
 
 async function loadCollections() {
-  const res = await fetch(`${API}/collections`);
-  const collections = await res.json();
-
-  collectionSelect.innerHTML = "";
-  collections.forEach(name => {
-    const option = document.createElement("option");
-    option.value = name;
-    option.textContent = name;
-    collectionSelect.appendChild(option);
-  });
-
-  // Load documents for first collection by default
-  if (collections.length > 0) loadDocuments();
+  try {
+    const cols = await fetchJSON('/collections');
+    $sel.innerHTML = cols.map(c => `<option value="${c}">${c}</option>`).join('');
+    loadDocuments();
+  } catch {
+    toast('Could not load collections');
+    $sel.innerHTML = '<option disabled>Error</option>';
+  }
 }
 
 async function loadDocuments() {
-  const collection = collectionSelect.value;
-  if (!collection) return;
-
-  const res = await fetch(`${API}/documents/${collection}`);
-  const data = await res.json();
-  const container = document.getElementById("notes");
-  container.innerHTML = "";
-  data.forEach(doc => {
-    const div = document.createElement("div");
-    div.className = "note";
-    div.innerHTML = `<h3>${doc.title}</h3><p>${doc.content}</p>`;
-    container.appendChild(div);
-  });
+  const col = $sel.value;
+  if (!col) return;
+  try {
+    const docs = await fetchJSON(`/documents/${col}`);
+    $notes.innerHTML = docs.map(d => `
+      <div class="note">
+        <button class="del" data-id="${d._id}">&times;</button>
+        <h3>${d.title}</h3>
+        <p>${d.content}</p>
+      </div>`).join('');
+    // attach delete listeners
+    $$notes('.del').forEach(btn =>
+      btn.onclick = async e => {
+        e.stopPropagation();
+        await fetch(`${API}/delete/${col}/${btn.dataset.id}`, { method: 'DELETE' });
+        toast('Deleted');
+        loadDocuments();
+      });
+  } catch {
+    toast('Could not load documents');
+  }
 }
 
-// Load documents when collection changes
-collectionSelect.addEventListener("change", loadDocuments);
-
-// Handle form submit
-docForm.addEventListener("submit", async (e) => {
+$form.addEventListener('submit', async e => {
   e.preventDefault();
-  const collection = collectionSelect.value;
-  const title = document.getElementById("title").value;
-  const content = document.getElementById("content").value;
-
-  await fetch(`${API}/add/${collection}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title, content }),
-  });
-
-  docForm.reset();
-  loadDocuments();
+  const col = $sel.value;
+  const title   = $('#title').value.trim();
+  const content = $('#content').value.trim();
+  if (!title || !content) return;
+  try {
+    await fetch(`${API}/add/${col}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, content })
+    });
+    $form.reset();
+    toast('Added');
+    loadDocuments();
+  } catch {
+    toast('Add failed');
+  }
 });
 
-// Initial load
-loadCollections();
+$('#refreshBtn').onclick = () => loadDocuments();
 
+// helpers
+const $$notes = sel => $notes.querySelectorAll(sel);
+
+loadCollections();
