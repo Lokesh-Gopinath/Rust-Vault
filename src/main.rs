@@ -1,105 +1,92 @@
 use axum::{
     extract::{Path, State},
-    response::{Html, Json},
-    routing::{delete, get, post},
-    Router,
+    http::StatusCode,
+    response::{Html, IntoResponse},
+    routing::{get, post},
+    Json, Router,
 };
-use futures::StreamExt;
-use mongodb::{
-    bson::{doc, oid::ObjectId, Document},
-    Client, Database,
-};
+use mongodb::{bson::doc, options::ClientOptions, Client, Collection, Database};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tokio::net::TcpListener;
-use tower::ServiceBuilder;
+use std::{net::SocketAddr, sync::Arc};
+use tower_http::services::ServeDir;
 use tower_http::cors::{Any, CorsLayer};
-use axum::serve;
 
-/* ---------- models ---------- */
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone)]
+struct AppState {
+    db: Database,
+}
+
+#[derive(Serialize, Deserialize)]
 struct Note {
     title: String,
     content: String,
 }
 
-/* ---------- state ---------- */
-#[derive(Clone)]
-struct AppState {
-    db: Arc<Database>,
-}
-
-/* ---------- main ---------- */
 #[tokio::main]
 async fn main() {
-    let mongo_uri = std::env::var("MONGO_URI").expect("MONGO_URI must be set");
-    let client = Client::with_uri_str(&mongo_uri)
-        .await
-        .expect("Failed to connect to MongoDB");
-    let db = Arc::new(client.database("rustvault"));
+    // MongoDB connection
+    let client_uri = std::env::var("MONGODB_URI").expect("MONGODB_URI not set");
+    let client_options = ClientOptions::parse(&client_uri).await.unwrap();
+    let client = Client::with_options(client_options).unwrap();
+    let db = client.database("rustvault");
 
+    let state = Arc::new(AppState { db });
+
+    // CORS
     let cors = CorsLayer::new().allow_origin(Any);
 
+    // Router
     let app = Router::new()
-        .route("/", get(root))
+        .route("/", get(serve_index))
         .route("/collections", get(get_collections))
-        .route("/documents/:collection", get(get_documents))
-        .route("/add/:collection", post(add_document))
-        .route("/delete/:collection/:id", delete(delete_document)) // NEW
-        .with_state(AppState { db: db.clone() })
-        .layer(ServiceBuilder::new().layer(cors));
+        .route("/add/:collection", post(add_note))
+        .route("/documents/:collection", get(get_notes))
+        .nest_service("/static", ServeDir::new("src/web")) // serve CSS + JS
+        .layer(cors)
+        .with_state(state);
 
-    let listener = TcpListener::bind("0.0.0.0:8080")
+    let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
+    println!("✅ RustVault running on http://{}", addr);
+    axum::serve(tokio::net::TcpListener::bind(addr).await.unwrap(), app)
         .await
-        .expect("Failed to bind port 8080");
-    println!("✅ RustVault running on http://0.0.0.0:8080");
-    serve(listener, app).await.unwrap();
+        .unwrap();
 }
 
-/* ---------- handlers ---------- */
-async fn root() -> Html<&'static str> {
+// Serve HTML
+async fn serve_index() -> impl IntoResponse {
     Html(include_str!("web/index.html"))
 }
 
-async fn get_collections(State(state): State<AppState>) -> Json<Vec<String>> {
+// Add new note
+async fn add_note(
+    Path(collection): Path<String>,
+    State(state): State<Arc<AppState>>,
+    Json(note): Json<Note>,
+) -> impl IntoResponse {
+    let collection: Collection<Note> = state.db.collection(&collection);
+    let bson_doc = doc! { "title": note.title, "content": note.content };
+    collection.insert_one(bson_doc).await.unwrap();
+    (StatusCode::OK, "Note added successfully")
+}
+
+// Fetch notes
+async fn get_notes(
+    Path(collection): Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let collection: Collection<Note> = state.db.collection(&collection);
+    let mut cursor = collection.find(doc! {}).await.unwrap();
+
+    let mut notes = Vec::new();
+    while let Some(Ok(note)) = cursor.next().await {
+        notes.push(note);
+    }
+
+    Json(notes)
+}
+
+// Get collection names dynamically
+async fn get_collections(State(state): State<Arc<AppState>>) -> Json<Vec<String>> {
     let names = state.db.list_collection_names().await.unwrap_or_default();
     Json(names)
 }
-
-async fn get_documents(
-    Path(collection_name): Path<String>,
-    State(state): State<AppState>,
-) -> Json<Vec<serde_json::Value>> {
-    let coll = state.db.collection::<Document>(&collection_name);
-    let mut cursor = coll.find(doc! {}).await.unwrap();
-    let mut docs = Vec::new();
-
-    while let Some(res) = cursor.next().await {
-        if let Ok(doc) = res {
-            docs.push(serde_json::to_value(&doc).unwrap());
-        }
-    }
-    Json(docs)
-}
-
-async fn add_document(
-    Path(collection_name): Path<String>,
-    State(state): State<AppState>,
-    Json(note): Json<Note>,
-) -> Json<&'static str> {
-    let coll = state.db.collection::<Document>(&collection_name);
-    let new_doc = doc! { "title": note.title, "content": note.content };
-    coll.insert_one(new_doc).await.unwrap();
-    Json("✅ Document added")
-}
-
-async fn delete_document(
-    Path((collection_name, id)): Path<(String, String)>,
-    State(state): State<AppState>,
-) -> Json<&'static str> {
-    let coll = state.db.collection::<Document>(&collection_name);
-    let oid = ObjectId::parse_str(&id).expect("Invalid ObjectId");
-    coll.delete_one(doc! { "_id": oid }).await.unwrap();
-    Json("✅ Document deleted")
-}
-
