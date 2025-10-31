@@ -8,7 +8,7 @@ use axum::{
 use mongodb::{bson::doc, bson::Document, Client, Collection};
 use serde::{Deserialize, Serialize};
 use tower_http::cors::{Any, CorsLayer};
-use futures_util::StreamExt; // 👈 For .next()
+use futures::StreamExt; // 👈 For .next()
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Note {
@@ -34,7 +34,7 @@ async fn main() {
 
 // Serve HTML UI
 async fn index() -> impl IntoResponse {
-    Html(include_str!("../web/index.html"))
+    Html(include_str!("web/index.html"))
 }
 
 // MongoDB client helper
@@ -88,3 +88,4 @@ async fn get_notes(Path(collection): Path<String>) -> impl IntoResponse {
 
     Json(notes)
 }
+
