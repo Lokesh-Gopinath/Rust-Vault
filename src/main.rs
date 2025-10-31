@@ -1,22 +1,16 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Json, Path},
     http::StatusCode,
     response::{Html, IntoResponse},
     routing::{get, post},
-    Json, Router,
+    Router,
 };
-use mongodb::{bson::doc, options::ClientOptions, Client, Collection, Database};
+use mongodb::{bson::doc, bson::Document, Client, Collection};
 use serde::{Deserialize, Serialize};
-use std::{net::SocketAddr, sync::Arc};
-use tower_http::services::ServeDir;
 use tower_http::cors::{Any, CorsLayer};
+use futures_util::StreamExt; // 👈 For .next()
 
-#[derive(Clone)]
-struct AppState {
-    db: Database,
-}
-
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct Note {
     title: String,
     content: String,
@@ -24,69 +18,73 @@ struct Note {
 
 #[tokio::main]
 async fn main() {
-    // MongoDB connection
-    let client_uri = std::env::var("MONGODB_URI").expect("MONGODB_URI not set");
-    let client_options = ClientOptions::parse(&client_uri).await.unwrap();
-    let client = Client::with_options(client_options).unwrap();
-    let db = client.database("rustvault");
-
-    let state = Arc::new(AppState { db });
-
-    // CORS
     let cors = CorsLayer::new().allow_origin(Any);
 
-    // Router
     let app = Router::new()
-        .route("/", get(serve_index))
-        .route("/collections", get(get_collections))
+        .route("/", get(index))
+        .route("/collections", get(list_collections))
         .route("/add/:collection", post(add_note))
-        .route("/documents/:collection", get(get_notes))
-        .nest_service("/static", ServeDir::new("src/web")) // serve CSS + JS
-        .layer(cors)
-        .with_state(state);
+        .route("/get/:collection", get(get_notes))
+        .layer(cors);
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
-    println!("✅ RustVault running on http://{}", addr);
-    axum::serve(tokio::net::TcpListener::bind(addr).await.unwrap(), app)
+    println!("✅ RustVault running on http://0.0.0.0:8080");
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
+    axum::serve(listener, app).await.unwrap();
+}
+
+// Serve HTML UI
+async fn index() -> impl IntoResponse {
+    Html(include_str!("../web/index.html"))
+}
+
+// MongoDB client helper
+async fn get_client() -> Client {
+    let uri = std::env::var("MONGODB_URI").expect("MONGODB_URI not set");
+    Client::with_uri_str(uri).await.unwrap()
+}
+
+// List collections
+async fn list_collections() -> impl IntoResponse {
+    let client = get_client().await;
+    let db = client.database("rustvault");
+
+    let collections = db
+        .list_collection_names() // ✅ Removed (None)
         .await
         .unwrap();
+
+    Json(collections)
 }
 
-// Serve HTML
-async fn serve_index() -> impl IntoResponse {
-    Html(include_str!("web/index.html"))
+// Add note
+async fn add_note(Path(collection): Path<String>, Json(note): Json<Note>) -> impl IntoResponse {
+    let client = get_client().await;
+    let db = client.database("rustvault");
+    let collection: Collection<Document> = db.collection(&collection); // ✅ Using Document
+
+    let bson_doc = doc! {
+        "title": note.title,
+        "content": note.content
+    };
+
+    collection.insert_one(bson_doc).await.unwrap(); // ✅ No extra argument
+    (StatusCode::OK, "Note added").into_response()
 }
 
-// Add new note
-async fn add_note(
-    Path(collection): Path<String>,
-    State(state): State<Arc<AppState>>,
-    Json(note): Json<Note>,
-) -> impl IntoResponse {
-    let collection: Collection<Note> = state.db.collection(&collection);
-    let bson_doc = doc! { "title": note.title, "content": note.content };
-    collection.insert_one(bson_doc).await.unwrap();
-    (StatusCode::OK, "Note added successfully")
-}
+// Get notes
+async fn get_notes(Path(collection): Path<String>) -> impl IntoResponse {
+    let client = get_client().await;
+    let db = client.database("rustvault");
+    let collection: Collection<Document> = db.collection(&collection);
 
-// Fetch notes
-async fn get_notes(
-    Path(collection): Path<String>,
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
-    let collection: Collection<Note> = state.db.collection(&collection);
     let mut cursor = collection.find(doc! {}).await.unwrap();
+    let mut notes: Vec<Document> = Vec::new();
 
-    let mut notes = Vec::new();
-    while let Some(Ok(note)) = cursor.next().await {
-        notes.push(note);
+    while let Some(result) = cursor.next().await {
+        if let Ok(note) = result {
+            notes.push(note);
+        }
     }
 
     Json(notes)
-}
-
-// Get collection names dynamically
-async fn get_collections(State(state): State<Arc<AppState>>) -> Json<Vec<String>> {
-    let names = state.db.list_collection_names().await.unwrap_or_default();
-    Json(names)
 }
