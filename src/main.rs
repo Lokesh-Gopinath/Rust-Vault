@@ -24,7 +24,7 @@ struct Note {
 
 // ✅ Root route — serves your HTML page
 async fn root() -> Html<&'static str> {
-    Html(include_str!("../web/index.html"))
+    Html(include_str!("/web/index.html"))
 }
 
 // ✅ List available MongoDB collections
@@ -101,3 +101,4 @@ async fn main() {
         .await
         .unwrap();
 }
+
