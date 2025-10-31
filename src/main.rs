@@ -9,10 +9,9 @@ use mongodb::{
     Client, Database,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tower_http::cors::{Any, CorsLayer};
-use tower_http::services::ServeDir;
-use futures_util::StreamExt;
+use std::{net::SocketAddr, sync::Arc};
+use tower_http::{cors::{Any, CorsLayer}, services::ServeDir};
+use futures_util::TryStreamExt; // 👈 Correct trait for Mongo cursor
 
 #[derive(Clone)]
 struct AppState {
@@ -35,7 +34,7 @@ async fn main() {
     let db = client.database("rustvault");
     let state = Arc::new(AppState { db });
 
-    // Serve static files (for /static/*)
+    // Serve static files
     let static_files = ServeDir::new("src/web");
 
     // Setup CORS
@@ -52,11 +51,12 @@ async fn main() {
         .with_state(state)
         .layer(cors);
 
-    println!("🚀 Server running at http://127.0.0.1:3000");
-    axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    // Use new Axum 0.7 server style
+    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
+    println!("🚀 Server running at http://{}", addr);
+
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
 
 async fn serve_index() -> impl IntoResponse {
@@ -67,9 +67,9 @@ async fn get_notes(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let collection = state.db.collection::<Document>("notes");
 
     let mut cursor = collection.find(doc! {}).await.expect("Find failed");
-
     let mut results = Vec::new();
-    while let Some(result) = cursor.try_next().await.unwrap_or(None) {
+
+    while let Some(result) = cursor.try_next().await.expect("Cursor failed") {
         results.push(result);
     }
 
@@ -84,7 +84,7 @@ async fn add_note(State(state): State<Arc<AppState>>, Json(note): Json<Note>) ->
         "content": note.content,
     };
 
-    collection.insert_one(doc, None).await.expect("Insert failed");
+    collection.insert_one(doc).await.expect("Insert failed");
 
     Json(serde_json::json!({"status": "ok"}))
 }
