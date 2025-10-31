@@ -1,43 +1,75 @@
-const API = `${window.location.origin}`;
+const API = "https://rust-vault.onrender.com"; // your Render backend
 
-async function init() {
+const collectionSelect = document.getElementById("collectionSelect");
+const docForm = document.getElementById("docForm");
+const notesContainer = document.getElementById("notes");
+const refreshBtn = document.getElementById("refreshBtn");
+
+async function loadCollections() {
   try {
-    const r = await fetch(`${API}/collections`);
-    if (!r.ok) throw new Error(r.status);
-    const cols = await r.json();
+    const res = await fetch(`${API}/collections`);
+    const collections = await res.json();
 
-    const sel = document.getElementById('collectionSelect');
-    sel.innerHTML = cols.map(c => `<option>${c}</option>`).join('');
-    sel.onchange = loadDocs;
-    sel.onchange();          // load first collection
-  } catch (e) {
-    console.error(e);
-    document.getElementById('collectionSelect').innerHTML =
-      '<option disabled>Error loading collections</option>';
+    collectionSelect.innerHTML = "";
+    collections.forEach(name => {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      collectionSelect.appendChild(option);
+    });
+
+    if (collections.length > 0) loadDocuments();
+  } catch (err) {
+    console.error("Failed to load collections", err);
   }
 }
 
-async function loadDocs() {
-  const col = document.getElementById('collectionSelect').value;
-  const r = await fetch(`${API}/documents/${col}`);
-  const docs = await r.json();
-  const html = docs.map(d =>
-    `<div class="note"><h3>${d.title}</h3><p>${d.content}</p></div>`).join('');
-  document.getElementById('notes').innerHTML = html;
+async function loadDocuments() {
+  const collection = collectionSelect.value;
+  if (!collection) return;
+
+  notesContainer.innerHTML = "<p>Loading...</p>";
+  try {
+    const res = await fetch(`${API}/documents/${collection}`);
+    const data = await res.json();
+
+    notesContainer.innerHTML = "";
+    if (data.length === 0) {
+      notesContainer.innerHTML = "<p>No notes found.</p>";
+      return;
+    }
+
+    data.forEach(doc => {
+      const div = document.createElement("div");
+      div.className = "note";
+      div.innerHTML = `<h3>${doc.title}</h3><p>${doc.content}</p>`;
+      notesContainer.appendChild(div);
+    });
+  } catch (err) {
+    notesContainer.innerHTML = "<p>Error loading notes.</p>";
+  }
 }
 
-document.getElementById('docForm').onsubmit = async (e) => {
+docForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const col = document.getElementById('collectionSelect').value;
-  const title = document.getElementById('title').value;
-  const content = document.getElementById('content').value;
-  await fetch(`${API}/add/${col}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, content })
-  });
-  e.target.reset();
-  loadDocs();
-};
+  const collection = collectionSelect.value;
+  const title = document.getElementById("title").value;
+  const content = document.getElementById("content").value;
 
-init();          // kick everything off
+  if (!collection) return alert("Select a collection first!");
+
+  await fetch(`${API}/add/${collection}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, content }),
+  });
+
+  docForm.reset();
+  loadDocuments();
+});
+
+collectionSelect.addEventListener("change", loadDocuments);
+refreshBtn.addEventListener("click", loadCollections);
+
+// Initialize
+loadCollections();
