@@ -6,7 +6,6 @@ const form = document.getElementById("docForm");
 const notesContainer = document.getElementById("notes");
 
 async function fetchCollections() {
-  // You can manually define collections or dynamically list from backend if added
   const collections = ["notes", "tasks", "journal"];
   collectionSelect.innerHTML = "";
   for (const col of collections) {
@@ -65,3 +64,4 @@ window.addEventListener("DOMContentLoaded", async () => {
   await fetchCollections();
   loadNotes();
 });
+
