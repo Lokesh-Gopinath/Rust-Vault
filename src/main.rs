@@ -11,7 +11,7 @@ use mongodb::{
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
 use tower_http::{cors::{Any, CorsLayer}, services::ServeDir};
-use futures_util::TryStreamExt; // 👈 Correct trait for Mongo cursor
+use futures_util::TryStreamExt; 
 
 #[derive(Clone)]
 struct AppState {
@@ -88,3 +88,4 @@ async fn add_note(State(state): State<Arc<AppState>>, Json(note): Json<Note>) ->
 
     Json(serde_json::json!({"status": "ok"}))
 }
+
